@@ -3,6 +3,9 @@ import nltk
 import spacy
 import os
 import pyresparser.resume_parser
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
 import pandas as pd
 import base64
 import random
@@ -28,11 +31,12 @@ load_dotenv()
 
 # Download and load stopwords/model safely
 nltk.download('stopwords')
+# Always use the correct spaCy model for this version
 try:
     nlp = spacy.load('en_core_web_sm')
-except:
-    from spacy.cli import download
-    download("en_core_web_sm")
+except OSError:
+    import spacy.cli
+    spacy.cli.download('en_core_web_sm')
     nlp = spacy.load('en_core_web_sm')
 
 # Set page config
@@ -216,12 +220,30 @@ def fetch_public_jobs(skills, location=None):
 # Streamlit section for LinkedIn jobs
 def job_applications_section(resume_data):
     st.markdown("## Real-Time Job Listings Based on Your Resume")
-    # Extract skills and location from resume data
-    skills = resume_data.get('skills', [])
-    location = resume_data.get('location', None)
+    # User input for job search
+    st.markdown('### Job Search Preferences')
+    user_job_title = st.text_input('Preferred Job Title/Role:', value='Software Engineer')
+    user_location = st.text_input('Preferred Location:', value='')
+    # Use user input if provided, else fallback to resume
+    skills = [user_job_title] if user_job_title else resume_data.get('skills', [])
+    location = user_location if user_location else resume_data.get('location', None)
     jobs = fetch_public_jobs(skills, location)
-    if not jobs:
-        st.warning("No jobs found at this time. Please check back later.")
+    # Detect if resume or API result says "no jobs available" or "no jobs found"
+    resume_text = resume_data.get('resume_text', '').lower()
+    no_jobs_keywords = ["no jobs available", "no jobs found", "no jobs availabke"]
+    no_jobs_in_resume = any(k in resume_text for k in no_jobs_keywords)
+    # Validate input and always provide a fallback job if needed
+    if not jobs or no_jobs_in_resume:
+        st.warning("No jobs found for your profile. Here's a recommended job you might be interested in:")
+        fallback_jobs = fetch_public_jobs(["Software Engineer"], None)
+        if fallback_jobs:
+            job = fallback_jobs[0]
+            st.markdown(f"**{job['title']}** at *{job['company']}*  ")
+            st.markdown(f"Location: {job['location']}")
+            st.markdown(f"[View Job Posting]({job['link']})", unsafe_allow_html=True)
+            st.markdown("---")
+        else:
+            st.info("No fallback jobs available at this time.")
     else:
         for job in jobs:
             st.markdown(f"**{job['title']}** at *{job['company']}*  ")
@@ -230,6 +252,7 @@ def job_applications_section(resume_data):
             st.markdown("---")
     # Auto-refresh every 10 minutes
     st.markdown("<script>setTimeout(function(){window.location.reload();}, 600000);</script>", unsafe_allow_html=True)
+
 
 
 # def run():
@@ -306,6 +329,19 @@ def run():
                 else:
                     # Always ask for confirmation if name is suspicious or single word
                     resume_data['name'] = st.text_input("Is this your name? If not, please correct:", value=resume_data['name'])
+
+                # Robust fallback for email and phone extraction
+                import re
+                if not resume_data.get('email'):
+                    # Try regex for email
+                    email_match = re.search(r'[\w\.-]+@[\w\.-]+', resume_text)
+                    if email_match:
+                        resume_data['email'] = email_match.group(0)
+                if not resume_data.get('mobile_number'):
+                    # Try regex for phone (simple, India-centric)
+                    phone_match = re.search(r'\b[789][0-9]{9}\b', resume_text)
+                    if phone_match:
+                        resume_data['mobile_number'] = phone_match.group(0)
 
                 st.header("**Resume Analysis**")
                 st.success("Hello " + resume_data['name'])
@@ -452,56 +488,61 @@ def run():
 
                 ### Resume writing recommendation
                 st.subheader("**Resume Tips & Ideas💡**")
+                # Enhanced resume scoring using cosine similarity
                 resume_score = 0
-                if 'Objective' in resume_text:
-                    resume_score = resume_score + 20
-                    st.markdown(
-                        '''<h4 style='text-align: left; color: #1ed760;'>[+] Awesome! You have added Objective</h4>''',
-                        unsafe_allow_html=True)
-                else:
-                    st.markdown(
-                        '''<h4 style='text-align: left; color: #fabc10;'>[-] According to our recommendation please add your career objective, it will give your career intension to the Recruiters.</h4>''',
-                        unsafe_allow_html=True)
-
-                if 'Declaration' in resume_text:
-                    resume_score = resume_score + 20
-                    st.markdown(
-                        '''<h4 style='text-align: left; color: #1ed760;'>[+] Awesome! You have added Delcaration✍/h4>''',
-                        unsafe_allow_html=True)
-                else:
-                    st.markdown(
-                        '''<h4 style='text-align: left; color: #fabc10;'>[-] According to our recommendation please add Declaration✍. It will give the assurance that everything written on your resume is true and fully acknowledged by you</h4>''',
-                        unsafe_allow_html=True)
-
-                if 'Hobbies' or 'Interests' in resume_text:
-                    resume_score = resume_score + 20
-                    st.markdown(
-                        '''<h4 style='text-align: left; color: #1ed760;'>[+] Awesome! You have added your Hobbies⚽</h4>''',
-                        unsafe_allow_html=True)
-                else:
-                    st.markdown(
-                        '''<h4 style='text-align: left; color: #fabc10;'>[-] According to our recommendation please add Hobbies⚽. It will show your persnality to the Recruiters and give the assurance that you are fit for this role or not.</h4>''',
-                        unsafe_allow_html=True)
-
-                if 'Achievements' in resume_text:
-                    resume_score = resume_score + 20
-                    st.markdown(
-                        '''<h4 style='text-align: left; color: #1ed760;'>[+] Awesome! You have added your Achievements🏅 </h4>''',
-                        unsafe_allow_html=True)
-                else:
-                    st.markdown(
-                        '''<h4 style='text-align: left; color: #fabc10;'>[-] According to our recommendation please add Achievements🏅. It will show that you are capable for the required position.</h4>''',
-                        unsafe_allow_html=True)
-
-                if 'Projects' in resume_text:
-                    resume_score = resume_score + 20
-                    st.markdown(
-                        '''<h4 style='text-align: left; color: #1ed760;'>[+] Awesome! You have added your Projects👨‍💻 </h4>''',
-                        unsafe_allow_html=True)
-                else:
-                    st.markdown(
-                        '''<h4 style='text-align: left; color: #fabc10;'>[-] According to our recommendation please add Projects👨‍💻. It will show that you have done work related the required position or not.</h4>''',
-                        unsafe_allow_html=True)
+                # Define target/ideal content for each section
+                # Define target/ideal content for each section (easy to add/remove)
+                target_sections = {
+                    'Education': ["education", "degree", "bachelor", "master", "university", "college", "school", "academic"],
+                    'Experience': ["experience", "work", "internship", "employment", "position", "role", "company", "organization"],
+                    'Skills': ["skills", "technologies", "tools", "languages", "proficiencies", "abilities"],
+                    'Projects': ["projects", "project work", "capstone", "research", "development", "case study", "implementation"],
+                    'Achievements': ["achievements", "awards", "honors", "recognition", "certificates", "winner", "accomplishments"],
+                    'Hobbies': ["hobbies", "interests", "passion", "activities", "sports", "music", "reading", "travel"],
+                    'Declaration': ["declaration", "I hereby declare", "all information is true", "I certify that", "to the best of my knowledge"]
+                }
+                # Assign weights (easy to tune)
+                section_weights = {
+                    'Education': 15,
+                    'Experience': 20,
+                    'Skills': 15,
+                    'Projects': 15,
+                    'Achievements': 10,
+                    'Hobbies': 10,
+                    'Declaration': 15
+                }
+                # Vectorizer
+                vectorizer = TfidfVectorizer().fit([resume_text] + sum(target_sections.values(), []))
+                section_scores = {}
+                st.markdown('---')
+                st.markdown('#### **Section Similarity Debug Info:**')
+                for section, keywords in target_sections.items():
+                    # Compute cosine similarity between resume and each keyword phrase
+                    sims = []
+                    # Score each keyword/phrase for the section
+                    for kw in keywords:
+                        X = vectorizer.transform([resume_text, kw])
+                        sim = cosine_similarity(X[0], X[1])[0][0]
+                        sims.append(sim)
+                    avg_sim = float(np.mean(sims)) if sims else 0
+                    section_scores[section] = avg_sim
+                    # Nonlinear scaling for fairness (robust to partial matches)
+                    resume_score += (avg_sim ** 0.4) * section_weights[section]  # even more lenient, higher scores
+                    # Actionable feedback
+                    if avg_sim > 0.05:
+                        st.markdown(
+                            f"""<h4 style='text-align: left; color: #1ed760;'>[+] Good! Your resume covers <b>{section}</b></h4>""",
+                            unsafe_allow_html=True)
+                    else:
+                        st.markdown(
+                            f"""<h4 style='text-align: left; color: #fabc10;'>[-] Please consider adding or improving <b>{section}</b> for a stronger resume.</h4>""",
+                            unsafe_allow_html=True)
+                # Cap score at 100
+                resume_score = min(int(round(resume_score)), 100)
+                st.markdown(f'### **Final Resume Score:** {resume_score}')
+                if resume_score <= 15:
+                    st.warning('Your resume score is very low. Please ensure your document contains clear sections and relevant content. If this is unexpected, try re-uploading or check the document format.')
+                # Documentation: To add/remove sections or keywords, simply update target_sections and section_weights above.
 
                 st.subheader("**Resume Score📝**")
                 st.markdown(
