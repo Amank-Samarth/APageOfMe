@@ -222,8 +222,24 @@ def job_applications_section(resume_data):
     st.markdown("## Real-Time Job Listings Based on Your Resume")
     # User input for job search
     st.markdown('### Job Search Preferences')
-    user_job_title = st.text_input('Preferred Job Title/Role:', value='Software Engineer')
-    user_location = st.text_input('Preferred Location:', value='')
+    # Always use detected field for Preferred Job Title/Role
+    user_job_title = st.text_input('Preferred Job Title/Role:', value=st.session_state.get('user_job_title', ''))
+    
+    # Dropdown for job location with Indian states and union territories
+    indian_states_and_uts = [
+        "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", 
+        "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", 
+        "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", 
+        "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", 
+        "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", 
+        "Uttar Pradesh", "Uttarakhand", "West Bengal",
+        "Andaman and Nicobar Islands", "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu", 
+        "Delhi", "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry"
+    ]
+    user_location = st.selectbox('Preferred Job Location:', 
+                                 [""] + indian_states_and_uts, 
+                                 help="Select your preferred job location from the list of Indian states and union territories")
+    
     # Use user input if provided, else fallback to resume
     skills = [user_job_title] if user_job_title else resume_data.get('skills', [])
     location = user_location if user_location else resume_data.get('location', None)
@@ -265,7 +281,7 @@ def run():
     choice = st.sidebar.selectbox("Choose among the given options:", activities)
     # link = '[©Developed by Spidy20](http://github.com/spidy20)'
     # st.sidebar.markdown(link, unsafe_allow_html=True)
-    img = Image.open('./Logo/SRA_Logo.jpg')
+    img = Image.open('Logo/SRA_logo.jpeg')
     img = img.resize((250, 250))
     st.image(img)
 
@@ -343,6 +359,9 @@ def run():
                     if phone_match:
                         resume_data['mobile_number'] = phone_match.group(0)
 
+                # --- DYNAMIC FIELD AND TITLE EXTRACTION ---
+                from field_detection import extract_field_and_titles
+                detected_field, detected_titles = extract_field_and_titles(resume_text)
                 st.header("**Resume Analysis**")
                 st.success("Hello " + resume_data['name'])
                 st.subheader("**Your Basic info**")
@@ -353,6 +372,19 @@ def run():
                     st.text('Resume pages: ' + str(resume_data['no_of_pages']))
                 except:
                     pass
+
+                # Display detected field and job titles
+                if detected_field:
+                    st.info(f"Detected Field/Industry: {detected_field}")
+                    # Automatically set Preferred Job Title/Role to detected field
+                    st.session_state['user_job_title'] = detected_field
+                else:
+                    detected_field = st.text_input('Could not confidently detect your field/industry. Please enter it:', value='')
+                    st.session_state['user_job_title'] = detected_field
+                if detected_titles:
+                    st.info(f"Detected Job Titles/Roles: {', '.join(detected_titles)}")
+                else:
+                    st.info("No clear job titles detected in your resume.")
 
                 cand_level = ''
                 if resume_data['no_of_pages'] == 1:
@@ -370,114 +402,34 @@ def run():
 
                 st.subheader("**Skills Recommendation💡**")
                 ## Skill shows
-                keywords = st_tags(label='### Skills that you have',
-                                   text='See our skills recommendation',
-                                   value=resume_data['skills'], key='1')
-
-                ##  recommendation
-                ds_keyword = ['tensorflow', 'keras', 'pytorch', 'machine learning', 'deep Learning', 'flask',
-                              'streamlit']
-                web_keyword = ['react', 'django', 'node jS', 'react js', 'php', 'laravel', 'magento', 'wordpress',
-                               'javascript', 'angular js', 'c#', 'flask']
-                android_keyword = ['android', 'android development', 'flutter', 'kotlin', 'xml', 'kivy']
-                ios_keyword = ['ios', 'ios development', 'swift', 'cocoa', 'cocoa touch', 'xcode']
-                uiux_keyword = ['ux', 'adobe xd', 'figma', 'zeplin', 'balsamiq', 'ui', 'prototyping', 'wireframes',
-                                'storyframes', 'adobe photoshop', 'photoshop', 'editing', 'adobe illustrator',
-                                'illustrator', 'adobe after effects', 'after effects', 'adobe premier pro',
-                                'premier pro', 'adobe indesign', 'indesign', 'wireframe', 'solid', 'grasp',
-                                'user research', 'user experience']
-
-                recommended_skills = []
-                reco_field = ''
+                # --- DYNAMIC SKILL RECOMMENDATION ---
+                resume_skills = set([s.lower() for s in resume_data.get('skills', [])])
+                reco_field = detected_field if detected_field else ''
                 rec_course = ''
-
-                ## Courses recommendation
-                for i in resume_data['skills']:
-                    ## Data science recommendation
-                    if i.lower() in ds_keyword:
-                        print(i.lower())
-                        reco_field = 'Data Science'
-                        st.success("** Our analysis says you are looking for Data Science Jobs.**")
-                        recommended_skills = ['Data Visualization', 'Predictive Analysis', 'Statistical Modeling',
-                                              'Data Mining', 'Clustering & Classification', 'Data Analytics',
-                                              'Quantitative Analysis', 'Web Scraping', 'ML Algorithms', 'Keras',
-                                              'Pytorch', 'Probability', 'Scikit-learn', 'Tensorflow', "Flask",
-                                              'Streamlit']
-                        recommended_keywords = st_tags(label='### Recommended skills for you.',
-                                                       text='Recommended skills generated from System',
-                                                       value=recommended_skills, key='2')
-                        st.markdown(
-                            '''<h4 style='text-align: left; color: #1ed760;'>Adding this skills to resume will boost🚀 the chances of getting a Job💼</h4>''',
-                            unsafe_allow_html=True)
-                        rec_course = course_recommender(ds_course)
-                        break
-
-                    ## Web development recommendation
-                    elif i.lower() in web_keyword:
-                        print(i.lower())
-                        reco_field = 'Web Development'
-                        st.success("** Our analysis says you are looking for Web Development Jobs **")
-                        recommended_skills = ['React', 'Django', 'Node JS', 'React JS', 'php', 'laravel', 'Magento',
-                                              'wordpress', 'Javascript', 'Angular JS', 'c#', 'Flask', 'SDK']
-                        recommended_keywords = st_tags(label='### Recommended skills for you.',
-                                                       text='Recommended skills generated from System',
-                                                       value=recommended_skills, key='3')
-                        st.markdown(
-                            '''<h4 style='text-align: left; color: #1ed760;'>Adding this skills to resume will boost🚀 the chances of getting a Job💼</h4>''',
-                            unsafe_allow_html=True)
-                        rec_course = course_recommender(web_course)
-                        break
-
-                    ## Android App Development
-                    elif i.lower() in android_keyword:
-                        print(i.lower())
-                        reco_field = 'Android Development'
-                        st.success("** Our analysis says you are looking for Android App Development Jobs **")
-                        recommended_skills = ['Android', 'Android development', 'Flutter', 'Kotlin', 'XML', 'Java',
-                                              'Kivy', 'GIT', 'SDK', 'SQLite']
-                        recommended_keywords = st_tags(label='### Recommended skills for you.',
-                                                       text='Recommended skills generated from System',
-                                                       value=recommended_skills, key='4')
-                        st.markdown(
-                            '''<h4 style='text-align: left; color: #1ed760;'>Adding this skills to resume will boost🚀 the chances of getting a Job💼</h4>''',
-                            unsafe_allow_html=True)
-                        rec_course = course_recommender(android_course)
-                        break
-
-                    ## IOS App Development
-                    elif i.lower() in ios_keyword:
-                        print(i.lower())
-                        reco_field = 'IOS Development'
-                        st.success("** Our analysis says you are looking for IOS App Development Jobs **")
-                        recommended_skills = ['IOS', 'IOS Development', 'Swift', 'Cocoa', 'Cocoa Touch', 'Xcode',
-                                              'Objective-C', 'SQLite', 'Plist', 'StoreKit', "UI-Kit", 'AV Foundation',
-                                              'Auto-Layout']
-                        recommended_keywords = st_tags(label='### Recommended skills for you.',
-                                                       text='Recommended skills generated from System',
-                                                       value=recommended_skills, key='5')
-                        st.markdown(
-                            '''<h4 style='text-align: left; color: #1ed760;'>Adding this skills to resume will boost🚀 the chances of getting a Job💼</h4>''',
-                            unsafe_allow_html=True)
-                        rec_course = course_recommender(ios_course)
-                        break
-
-                    ## Ui-UX Recommendation
-                    elif i.lower() in uiux_keyword:
-                        print(i.lower())
-                        reco_field = 'UI-UX Development'
-                        st.success("** Our analysis says you are looking for UI-UX Development Jobs **")
-                        recommended_skills = ['UI', 'User Experience', 'Adobe XD', 'Figma', 'Zeplin', 'Balsamiq',
-                                              'Prototyping', 'Wireframes', 'Storyframes', 'Adobe Photoshop', 'Editing',
-                                              'Illustrator', 'After Effects', 'Premier Pro', 'Indesign', 'Wireframe',
-                                              'Solid', 'Grasp', 'User Research']
-                        recommended_keywords = st_tags(label='### Recommended skills for you.',
-                                                       text='Recommended skills generated from System',
-                                                       value=recommended_skills, key='6')
-                        st.markdown(
-                            '''<h4 style='text-align: left; color: #1ed760;'>Adding this skills to resume will boost🚀 the chances of getting a Job💼</h4>''',
-                            unsafe_allow_html=True)
-                        rec_course = course_recommender(uiux_course)
-                        break
+                field_skill_map = {
+                    'Data Science': ['Data Visualization', 'Predictive Analysis', 'Statistical Modeling', 'Data Mining', 'ML Algorithms', 'Keras', 'Pytorch', 'Scikit-learn', 'Tensorflow', 'Flask', 'Streamlit'],
+                    'Web Development': ['React', 'Django', 'Node JS', 'React JS', 'php', 'laravel', 'Magento', 'wordpress', 'Javascript', 'Angular JS', 'c#', 'Flask', 'SDK'],
+                    'Android Development': ['Android', 'Android development', 'Flutter', 'Kotlin', 'XML', 'Java', 'Kivy', 'GIT', 'SDK', 'SQLite'],
+                    'iOS Development': ['IOS', 'IOS Development', 'Swift', 'Cocoa', 'Cocoa Touch', 'Xcode', 'Objective-C', 'SQLite', 'Plist', 'StoreKit', 'UI-Kit', 'AV Foundation', 'Auto-Layout'],
+                    'UI-UX': ['UI', 'User Experience', 'Adobe XD', 'Figma', 'Zeplin', 'Balsamiq', 'Prototyping', 'Wireframes', 'Storyframes', 'Adobe Photoshop', 'Editing', 'Illustrator', 'After Effects', 'Premier Pro', 'Indesign', 'Wireframe', 'Solid', 'Grasp', 'User Research'],
+                    'Finance': ['Accounting', 'Auditing', 'Tax', 'Investment', 'Financial Analysis', 'Banking', 'Risk Management'],
+                    'Marketing': ['SEO', 'Content Marketing', 'Brand Management', 'Advertising', 'Analytics', 'Digital Marketing'],
+                    'Education': ['Teaching', 'Curriculum Design', 'Lesson Planning', 'Instruction', 'Training'],
+                    'Healthcare': ['Patient Care', 'Medical Terminology', 'Clinical Skills', 'Healthcare Management'],
+                }
+                typical_skills = set([s.lower() for s in field_skill_map.get(detected_field, [])])
+                recommended_skills = list(typical_skills - resume_skills)
+                # Show skills from resume
+                st_tags(label='### Skills that you have', text='Extracted from your resume', value=list(resume_skills), key='resume_skills')
+                # Show recommended skills
+                if detected_field:
+                    st.success(f"** Our analysis says you are looking for {detected_field} Jobs **")
+                    if recommended_skills:
+                        st_tags(label='### Recommended skills for you', text='Add these to boost your profile', value=recommended_skills, key='recommended_skills')
+                    else:
+                        st.info('You already have most of the key skills for this field!')
+                else:
+                    st.info('Add more information to your resume to help us detect your field and recommend relevant skills.')
 
                 #
                 ## Insert into table
@@ -616,18 +568,49 @@ def run():
                 st.dataframe(df)
                 st.markdown(get_table_download_link(df, 'User_Data.csv', 'Download Report'), unsafe_allow_html=True)
                 ## Admin Side Data
-                query = 'select * from user_data;'
-                plot_data = pd.read_sql(query, connection)
 
                 ## Pie chart for predicted field recommendations
                 st.subheader("📈 **Pie-Chart for Predicted Field Recommendations**")
-                fig = px.pie(plot_data, names='Predicted_Field', title='Predicted Field according to the Skills')
-                st.plotly_chart(fig)
+
+                # Clean up missing/unknown fields
+                def clean_field(val):
+                    if not val or str(val).strip().lower() in ["", "none", "nan", "null"]:
+                        return "Unknown"
+                    return str(val)
+                df['Predicted Field'] = df['Predicted Field'].apply(clean_field)
+
+                # Aggregate for pie chart
+                display_data = df['Predicted Field'].value_counts().reset_index()
+                display_data.columns = ['Field', 'Count']
+
+                # Pie chart with percentage and count labels, improved colors, and tooltips
+                fig = px.pie(
+                    display_data,
+                    names='Field',
+                    values='Count',
+                    title='Predicted Field according to the Skills',
+                    color_discrete_sequence=px.colors.qualitative.Safe,
+                    hole=0.3,
+                )
+                fig.update_traces(
+                    textinfo='percent+label',
+                    hovertemplate='<b>%{label}</b><br>Count: %{value}<br>Percent: %{percent}',
+                    pull=[0.05 if v == display_data['Count'].max() else 0 for v in display_data['Count']],
+                )
+                fig.update_layout(
+                    legend_title_text='Field',
+                    margin=dict(t=60, b=20, l=0, r=0),
+                )
+                # Add a refresh button for dynamic updates
+                if st.button('🔄 Refresh Pie Chart'):
+                    st.experimental_rerun()
+                st.plotly_chart(fig, use_container_width=True)
 
                 ### Pie chart for User's👨‍💻 Experienced Level
                 st.subheader("📈 ** Pie-Chart for User's👨‍💻 Experienced Level**")
-                fig = px.pie(plot_data, names='User_level', title="Pie-Chart📈 for User's👨‍💻 Experienced Level")
+                fig = px.pie(df, names='User Level', title="Pie-Chart📈 for User's👨‍💻 Experienced Level")
                 st.plotly_chart(fig)
+
 
             else:
                 st.error("Wrong ID & Password Provided")
